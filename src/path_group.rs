@@ -16,6 +16,7 @@ impl<'ctx> PathGroup<'ctx> {
         F: Fn(&State) -> Option<T>,
     {
         loop {
+            debug!("num paths: {}", self.0.len());
             let state = self.0.pop()?;
             let v = fcn(&state);
             if v.is_some() {
@@ -28,6 +29,7 @@ impl<'ctx> PathGroup<'ctx> {
     pub fn explore_until_output(&mut self, output: &[u8]) -> Option<ConcreteState> {
         self.explore_until(|state| {
             let state = state.concretize().ok()?;
+            debug!("concrete output: {:?}", state.output);
             if state.output == output {
                 Some(state)
             } else {
@@ -42,7 +44,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_path_group() {
+    fn test_add() {
         let cfg = z3::Config::new();
         let ctx = z3::Context::new(&cfg);
         let prog = ast::Prog::from_str(",>,[-<+>]<.").unwrap();
