@@ -27,10 +27,10 @@ mod tests {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Hash)]
 pub struct Prog(pub Vec<Insn>);
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Hash)]
 pub enum Insn {
     /// '>' - Move the data pointer to the right
     Right,

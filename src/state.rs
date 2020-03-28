@@ -3,16 +3,19 @@ use crate::ast;
 use std::iter;
 use std::rc::Rc;
 
+use derivative::Derivative;
 use derive_setters::Setters;
 use z3::ast::Ast as Z3Ast;
 
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Hash)]
 pub struct SymBytes<'ctx>(pub Vec<z3::ast::BV<'ctx>>);
 
 /// Symbolic program state
-#[derive(Clone, Setters, PartialEq, Debug)]
+#[derive(Clone, Setters, PartialEq, Eq, Debug, Derivative)]
+#[derivative(Hash)]
 pub struct State<'ctx> {
     /// z3 context
+    #[derivative(Hash = "ignore")]
     pub ctx: &'ctx z3::Context,
 
     /// Brainf*** program
