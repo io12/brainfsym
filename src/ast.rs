@@ -3,7 +3,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_from_brainf() {
+    fn test_parse() {
         use Insn::*;
 
         assert_eq!(
@@ -37,6 +37,31 @@ mod tests {
                 Out,
                 Dec,
                 JmpIfNonZero(7),
+            ])
+        );
+
+        assert_eq!(
+            Prog::from_str("[]").unwrap(),
+            Prog(vec![JmpIfZero(2), JmpIfNonZero(1)])
+        );
+
+        assert_eq!(
+            Prog::from_str("[][]").unwrap(),
+            Prog(vec![
+                JmpIfZero(2),
+                JmpIfNonZero(1),
+                JmpIfZero(4),
+                JmpIfNonZero(3)
+            ])
+        );
+
+        assert_eq!(
+            Prog::from_str("[[]]").unwrap(),
+            Prog(vec![
+                JmpIfZero(4),
+                JmpIfZero(3),
+                JmpIfNonZero(2),
+                JmpIfNonZero(1),
             ])
         );
     }
