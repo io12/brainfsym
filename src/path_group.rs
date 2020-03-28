@@ -104,9 +104,21 @@ mod tests {
     fn test_add() {
         let cfg = z3::Config::new();
         let ctx = z3::Context::new(&cfg);
+
         let prog = ast::Prog::from_str(",>,[-<+>]<.").unwrap();
         let mut path_group = PathGroup::make_entry(&ctx, Rc::new(prog), 16);
         let res = path_group.explore_until_output(&[2]).unwrap();
         assert_eq!(res.input.iter().sum::<u8>(), 2);
+    }
+
+    #[test]
+    fn test_rev() {
+        let cfg = z3::Config::new();
+        let ctx = z3::Context::new(&cfg);
+
+        let prog = ast::Prog::from_str("+[>,]+[<.-]").unwrap();
+        let mut path_group = PathGroup::make_entry(&ctx, Rc::new(prog), 16);
+        let res = path_group.explore_until_output(b"ABC").unwrap();
+        assert_eq!(res.input, b"CBA\x00");
     }
 }
