@@ -160,8 +160,7 @@ impl<'ctx> State<'ctx> {
     }
 
     fn inc_insn_ptr(&self) -> Self {
-        self.clone()
-            .insn_ptr((self.insn_ptr + 1) % self.prog.0.len())
+        self.clone().insn_ptr(self.insn_ptr + 1)
     }
 
     fn op_right(&self) -> Self {
