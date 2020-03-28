@@ -198,8 +198,8 @@ impl<'ctx> State<'ctx> {
         let cell_eq_zero = self.get_cell()._eq(&z3::ast::BV::from_u64(self.ctx, 0, 8));
         let cell_not_eq_zero = z3::ast::Bool::not(&cell_eq_zero);
 
-        let zero_path = self.path.and(&[&cell_eq_zero]);
-        let non_zero_path = self.path.and(&[&cell_not_eq_zero]);
+        let zero_path = self.path.and(&[&cell_eq_zero]).simplify();
+        let non_zero_path = self.path.and(&[&cell_not_eq_zero]).simplify();
 
         let (taken_path, not_taken_path) = if if_zero {
             (zero_path, non_zero_path)
