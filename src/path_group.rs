@@ -52,7 +52,7 @@ impl<'ctx> PathGroup<'ctx> {
         F: Fn(&State) -> ExploreFnResult<T>,
     {
         loop {
-            trace!(
+            debug!(
                 "num next: {}, num_visited: {}",
                 self.next.len(),
                 self.visited.len()
@@ -62,11 +62,13 @@ impl<'ctx> PathGroup<'ctx> {
             if let Err(z3::SatResult::Unsat) = state.check_sat() {
                 continue;
             }
-            self.visited.insert(state.clone());
             match fcn(&state) {
                 ExploreFnResult::Done(v) => return Some(v),
                 ExploreFnResult::Invalid => continue,
-                ExploreFnResult::Valid => self.add_continuations(&state),
+                ExploreFnResult::Valid => {
+                    self.visited.insert(state.clone());
+                    self.add_continuations(&state)
+                }
             }
         }
     }
