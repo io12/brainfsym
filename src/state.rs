@@ -132,7 +132,12 @@ impl<'ctx> State<'ctx> {
 
     fn op_left(&self) -> Self {
         self.clone()
-            .data_ptr((self.data_ptr - 1) % self.mem.0.len())
+            .data_ptr(
+                // TODO: Make this clearer
+                self.data_ptr
+                    .checked_sub(1)
+                    .unwrap_or(self.mem.0.len().checked_sub(1).unwrap_or(0)),
+            )
             .inc_insn_ptr()
     }
 
