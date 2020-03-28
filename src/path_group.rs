@@ -3,15 +3,12 @@ use crate::state::ConcreteState;
 use crate::state::State;
 use crate::state::SymBytes;
 
-use std::cmp;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use priority_queue::PriorityQueue;
-
 pub struct PathGroup<'ctx> {
-    next: PriorityQueue<State<'ctx>, cmp::Reverse<usize>>,
+    next: Vec<State<'ctx>>,
     visited: HashSet<State<'ctx>>,
 }
 
@@ -33,7 +30,7 @@ pub enum ExploreFnResult<T> {
 impl<'ctx> PathGroup<'ctx> {
     pub fn make_entry(ctx: &'ctx z3::Context, prog: Rc<ast::Prog>, mem_size: usize) -> Self {
         Self {
-            next: vec![(State::make_entry(ctx, prog, mem_size), cmp::Reverse(0))].into(),
+            next: vec![State::make_entry(ctx, prog, mem_size)],
             visited: HashSet::new(),
         }
     }
@@ -41,8 +38,7 @@ impl<'ctx> PathGroup<'ctx> {
     fn add_continuations(&mut self, state: &State<'ctx>) {
         for state in state.step() {
             if !self.visited.contains(&state) {
-                let priority = cmp::Reverse(state.input.0.len());
-                self.next.push(state, priority);
+                self.next.push(state);
             }
         }
     }
@@ -57,7 +53,7 @@ impl<'ctx> PathGroup<'ctx> {
                 self.next.len(),
                 self.visited.len()
             );
-            let (state, _) = self.next.pop()?;
+            let state = self.next.pop()?;
             trace!("state: {:#?}", state);
             if let Err(z3::SatResult::Unsat) = state.check_sat() {
                 continue;
