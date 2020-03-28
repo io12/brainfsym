@@ -13,6 +13,21 @@ pub struct PathGroup<'ctx> {
     visited: HashSet<State<'ctx>>,
 }
 
+/// Type returned by `explore_until()` callback
+pub enum ExploreFnResult<T> {
+    /// Found the target state. This includes an inner type so the caller can
+    /// examine the resulting symbolic state, concrete state, or any other data.
+    Done(T),
+
+    /// This state is invalid. Path exploration will discard it and not compute
+    /// continuations
+    Invalid,
+
+    /// This state is valid. It is not the target state, but continuations
+    /// should be computed.
+    Valid,
+}
+
 impl<'ctx> PathGroup<'ctx> {
     pub fn make_entry(ctx: &'ctx z3::Context, prog: Rc<ast::Prog>, mem_size: usize) -> Self {
         Self {
@@ -21,9 +36,18 @@ impl<'ctx> PathGroup<'ctx> {
         }
     }
 
+    fn add_continuations(&mut self, state: &State<'ctx>) {
+        for state in state.step() {
+            if !self.visited.contains(&state) {
+                let priority = cmp::Reverse(state.input.0.len());
+                self.next.push(state, priority);
+            }
+        }
+    }
+
     pub fn explore_until<F, T>(&mut self, fcn: F) -> Option<T>
     where
-        F: Fn(&State) -> Option<T>,
+        F: Fn(&State) -> ExploreFnResult<T>,
     {
         loop {
             debug!(
@@ -34,28 +58,27 @@ impl<'ctx> PathGroup<'ctx> {
             let (state, _) = self.next.pop()?;
             debug!("state: {:#?}", state);
             self.visited.insert(state.clone());
-            let v = fcn(&state);
-            if v.is_some() {
-                return v;
-            }
-            for state in state.step() {
-                if !self.visited.contains(&state) {
-                    let priority = cmp::Reverse(state.input.0.len());
-                    self.next.push(state, priority);
-                }
+            match fcn(&state) {
+                ExploreFnResult::Done(v) => return Some(v),
+                ExploreFnResult::Invalid => continue,
+                ExploreFnResult::Valid => self.add_continuations(&state),
             }
         }
     }
 
     pub fn explore_until_output(&mut self, output: &[u8]) -> Option<ConcreteState> {
-        self.explore_until(|state| {
-            let state = state.concretize().ok()?;
-            debug!("concrete output: {:?}", state.output);
-            if state.output == output {
-                Some(state)
-            } else {
-                None
+        self.explore_until(|state| match state.concretize() {
+            Ok(state) => {
+                debug!("concrete output: {:?}", state.output);
+                if state.output == output {
+                    ExploreFnResult::Done(state)
+                } else {
+                    ExploreFnResult::Valid
+                }
             }
+            Err(z3::SatResult::Sat) => unreachable!(),
+            Err(z3::SatResult::Unknown) => ExploreFnResult::Valid,
+            Err(z3::SatResult::Unsat) => ExploreFnResult::Invalid,
         })
     }
 }
