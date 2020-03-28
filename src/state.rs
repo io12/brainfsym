@@ -281,21 +281,19 @@ impl ConcreteState {
 
 impl<'ctx> SymBytes<'ctx> {
     pub fn syms_eq(ctx: &'ctx z3::Context, syms: &Self, concr: &[u8]) -> z3::ast::Bool<'ctx> {
-        if syms.0.len() == concr.len() {
-            let syms = syms.0.iter();
-            let concr = concr.iter();
-            let vals = syms
-                .zip(concr)
-                .map(|(sym, concr)| {
-                    let concr = z3::ast::BV::from_u64(ctx, *concr as u64, 8);
-                    sym._eq(&concr)
-                })
-                .collect::<Vec<z3::ast::Bool>>();
-            let vals = vals.iter().collect::<Vec<&z3::ast::Bool>>();
-            z3::ast::Bool::and(&z3::ast::Bool::from_bool(ctx, true), vals.as_slice())
-        } else {
-            z3::ast::Bool::from_bool(ctx, false)
-        }
-        .simplify()
+        let syms = syms.0.iter();
+        let concr = concr.iter();
+        let vals = syms
+            .zip(concr)
+            .map(|(sym, concr)| {
+                let concr = z3::ast::BV::from_u64(ctx, *concr as u64, 8);
+                sym._eq(&concr)
+            })
+            .collect::<Vec<z3::ast::Bool>>();
+        let vals = vals.iter().collect::<Vec<&z3::ast::Bool>>();
+        let vals = vals.as_slice();
+        let bool_true = z3::ast::Bool::from_bool(ctx, true);
+        let eq = z3::ast::Bool::and(&bool_true, vals);
+        eq.simplify()
     }
 }

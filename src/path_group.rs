@@ -78,15 +78,17 @@ impl<'ctx> PathGroup<'ctx> {
 
             debug!("state output len: {}/{}", sym_len, concr_len);
 
-            match sym_len.cmp(&concr_len) {
-                Ordering::Less => ExploreFnResult::Valid,
+            let cmp = sym_len.cmp(&concr_len);
+            match cmp {
                 Ordering::Greater => ExploreFnResult::Invalid,
-                Ordering::Equal => {
+                Ordering::Less | Ordering::Equal => {
                     let output_eq = SymBytes::syms_eq(state.ctx, &state.output, output);
                     let state = state.concretize_with(&output_eq);
                     match state {
-                        Ok(state) => ExploreFnResult::Done(state),
-                        _ => ExploreFnResult::Valid,
+                        Ok(state) if cmp == Ordering::Equal => ExploreFnResult::Done(state),
+                        Ok(_) | Err(z3::SatResult::Unknown) => ExploreFnResult::Valid,
+                        Err(z3::SatResult::Unsat) => ExploreFnResult::Invalid,
+                        Err(z3::SatResult::Sat) => unreachable!(),
                     }
                 }
             }
