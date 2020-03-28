@@ -1,6 +1,7 @@
 use crate::ast;
 use crate::state::ConcreteState;
 use crate::state::State;
+use crate::state::SymBytes;
 
 use std::cmp;
 use std::collections::HashSet;
@@ -67,18 +68,28 @@ impl<'ctx> PathGroup<'ctx> {
     }
 
     pub fn explore_until_output(&mut self, output: &[u8]) -> Option<ConcreteState> {
-        self.explore_until(|state| match state.concretize() {
-            Ok(state) => {
-                debug!("concrete output: {:?}", state.output);
-                if state.output == output {
-                    ExploreFnResult::Done(state)
-                } else {
-                    ExploreFnResult::Valid
+        self.explore_until(|state| {
+            let (len_eq, state) = if state.output.0.len() == output.len() {
+                let output_eq = SymBytes::syms_eq(state.ctx, &state.output, output);
+                let state = state.concretize_with(&output_eq);
+                (true, state)
+            } else {
+                let state = state.concretize();
+                (false, state)
+            };
+            match state {
+                Ok(state) => {
+                    debug!("concrete output: {:?}", state.output);
+                    if len_eq {
+                        ExploreFnResult::Done(state)
+                    } else {
+                        ExploreFnResult::Valid
+                    }
                 }
+                Err(z3::SatResult::Sat) => unreachable!(),
+                Err(z3::SatResult::Unknown) => ExploreFnResult::Valid,
+                Err(z3::SatResult::Unsat) => ExploreFnResult::Invalid,
             }
-            Err(z3::SatResult::Sat) => unreachable!(),
-            Err(z3::SatResult::Unknown) => ExploreFnResult::Valid,
-            Err(z3::SatResult::Unsat) => ExploreFnResult::Invalid,
         })
     }
 }

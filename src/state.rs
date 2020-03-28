@@ -114,8 +114,17 @@ impl<'ctx> State<'ctx> {
     }
 
     pub fn concretize(&self) -> Result<ConcreteState, z3::SatResult> {
+        let constraint = z3::ast::Bool::from_bool(self.ctx, true);
+        self.concretize_with(&constraint)
+    }
+
+    pub fn concretize_with(
+        &self,
+        constraint: &z3::ast::Bool<'ctx>,
+    ) -> Result<ConcreteState, z3::SatResult> {
         let solver = z3::Solver::new(self.ctx);
         solver.assert(&self.path);
+        solver.assert(constraint);
         let err = solver.check();
         if err == z3::SatResult::Sat {
             Ok(ConcreteState::from_model(&solver.get_model(), self)
@@ -256,5 +265,26 @@ impl ConcreteState {
             input: state.input.concretize(model)?,
             output: state.output.concretize(model)?,
         })
+    }
+}
+
+impl<'ctx> SymBytes<'ctx> {
+    pub fn syms_eq(ctx: &'ctx z3::Context, syms: &Self, concr: &[u8]) -> z3::ast::Bool<'ctx> {
+        if syms.0.len() == concr.len() {
+            let syms = syms.0.iter();
+            let concr = concr.iter();
+            let vals = syms
+                .zip(concr)
+                .map(|(sym, concr)| {
+                    let concr = z3::ast::BV::from_u64(ctx, *concr as u64, 8);
+                    sym._eq(&concr)
+                })
+                .collect::<Vec<z3::ast::Bool>>();
+            let vals = vals.iter().collect::<Vec<&z3::ast::Bool>>();
+            z3::ast::Bool::and(&z3::ast::Bool::from_bool(ctx, true), vals.as_slice())
+        } else {
+            z3::ast::Bool::from_bool(ctx, false)
+        }
+        .simplify()
     }
 }
