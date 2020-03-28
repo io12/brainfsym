@@ -57,7 +57,7 @@ impl<'ctx> PathGroup<'ctx> {
                 self.visited.len()
             );
             let (state, _) = self.next.pop()?;
-            debug!("state: {:#?}", state);
+            trace!("state: {:#?}", state);
             self.visited.insert(state.clone());
             match fcn(&state) {
                 ExploreFnResult::Done(v) => return Some(v),
