@@ -215,7 +215,7 @@ impl<'ctx> State<'ctx> {
     }
 
     fn op_in(&self) -> Self {
-        let name = format!("input[{}]", self.mem.0.len());
+        let name = format!("input[{}]", self.input.0.len());
         let val = z3::ast::BV::new_const(self.ctx, name, 8);
         self.clone()
             .input(SymBytes(
