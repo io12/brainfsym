@@ -294,6 +294,7 @@ impl<'ctx> SymBytes<'ctx> {
         let vals = vals.as_slice();
         let bool_true = z3::ast::Bool::from_bool(ctx, true);
         let eq = z3::ast::Bool::and(&bool_true, vals);
+        debug!("syms eq: {:?}", eq);
         eq.simplify()
     }
 }
