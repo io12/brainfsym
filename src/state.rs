@@ -81,6 +81,8 @@ fn init_mem(ctx: &z3::Context, mem_size: usize) -> SymBytes {
     SymBytes(iter::repeat(zero).take(mem_size).collect())
 }
 
+pub type SmtResult<T> = Result<T, z3::SatResult>;
+
 impl<'ctx> State<'ctx> {
     pub fn make_entry(ctx: &'ctx z3::Context, prog: Rc<ast::Prog>, mem_size: usize) -> Self {
         State {
@@ -113,24 +115,33 @@ impl<'ctx> State<'ctx> {
         self.insn_ptr == self.prog.0.len()
     }
 
-    pub fn concretize(&self) -> Result<ConcreteState, z3::SatResult> {
+    pub fn check_sat(&self) -> SmtResult<z3::Solver> {
         let constraint = z3::ast::Bool::from_bool(self.ctx, true);
-        self.concretize_with(&constraint)
+        self.check_sat_with(&constraint)
     }
 
-    pub fn concretize_with(
-        &self,
-        constraint: &z3::ast::Bool<'ctx>,
-    ) -> Result<ConcreteState, z3::SatResult> {
+    pub fn check_sat_with(&self, constraint: &z3::ast::Bool<'ctx>) -> SmtResult<z3::Solver> {
         let solver = z3::Solver::new(self.ctx);
         solver.assert(&self.path);
         solver.assert(constraint);
         let err = solver.check();
         if err == z3::SatResult::Sat {
-            Ok(ConcreteState::from_model(&solver.get_model(), self)
-                .expect("failed concretizing state"))
+            Ok(solver)
         } else {
             Err(err)
+        }
+    }
+
+    pub fn concretize(&self) -> SmtResult<ConcreteState> {
+        let constraint = z3::ast::Bool::from_bool(self.ctx, true);
+        self.concretize_with(&constraint)
+    }
+
+    pub fn concretize_with(&self, constraint: &z3::ast::Bool<'ctx>) -> SmtResult<ConcreteState> {
+        match self.check_sat_with(constraint) {
+            Ok(solver) => Ok(ConcreteState::from_model(&solver.get_model(), self)
+                .expect("failed concretizing state")),
+            Err(err) => Err(err),
         }
     }
 

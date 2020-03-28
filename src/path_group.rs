@@ -4,6 +4,7 @@ use crate::state::State;
 use crate::state::SymBytes;
 
 use std::cmp;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -51,13 +52,16 @@ impl<'ctx> PathGroup<'ctx> {
         F: Fn(&State) -> ExploreFnResult<T>,
     {
         loop {
-            debug!(
+            trace!(
                 "num next: {}, num_visited: {}",
                 self.next.len(),
                 self.visited.len()
             );
             let (state, _) = self.next.pop()?;
             trace!("state: {:#?}", state);
+            if let Err(z3::SatResult::Unsat) = state.check_sat() {
+                continue;
+            }
             self.visited.insert(state.clone());
             match fcn(&state) {
                 ExploreFnResult::Done(v) => return Some(v),
@@ -69,26 +73,22 @@ impl<'ctx> PathGroup<'ctx> {
 
     pub fn explore_until_output(&mut self, output: &[u8]) -> Option<ConcreteState> {
         self.explore_until(|state| {
-            let (len_eq, state) = if state.output.0.len() == output.len() {
-                let output_eq = SymBytes::syms_eq(state.ctx, &state.output, output);
-                let state = state.concretize_with(&output_eq);
-                (true, state)
-            } else {
-                let state = state.concretize();
-                (false, state)
-            };
-            match state {
-                Ok(state) => {
-                    debug!("concrete output: {:?}", state.output);
-                    if len_eq {
-                        ExploreFnResult::Done(state)
-                    } else {
-                        ExploreFnResult::Valid
+            let sym_len = state.output.0.len();
+            let concr_len = output.len();
+
+            debug!("state output len: {}/{}", sym_len, concr_len);
+
+            match sym_len.cmp(&concr_len) {
+                Ordering::Less => ExploreFnResult::Valid,
+                Ordering::Greater => ExploreFnResult::Invalid,
+                Ordering::Equal => {
+                    let output_eq = SymBytes::syms_eq(state.ctx, &state.output, output);
+                    let state = state.concretize_with(&output_eq);
+                    match state {
+                        Ok(state) => ExploreFnResult::Done(state),
+                        _ => ExploreFnResult::Valid,
                     }
                 }
-                Err(z3::SatResult::Sat) => unreachable!(),
-                Err(z3::SatResult::Unknown) => ExploreFnResult::Valid,
-                Err(z3::SatResult::Unsat) => ExploreFnResult::Invalid,
             }
         })
     }
