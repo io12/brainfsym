@@ -7,6 +7,22 @@ use derivative::Derivative;
 use derive_setters::Setters;
 use z3::ast::Ast as Z3Ast;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_state_clone_eq() {
+        let cfg = z3::Config::new();
+        let ctx = z3::Context::new(&cfg);
+        let prog = ast::Prog::from_str(",>,[-<+>]<.").unwrap();
+        let state = State::make_entry(&ctx, Rc::new(prog), 16);
+        assert_eq!(state, state);
+        assert_eq!(state.clone(), state);
+        assert_eq!(state.clone(), state.clone());
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Default, Hash)]
 pub struct SymBytes<'ctx>(pub Vec<z3::ast::BV<'ctx>>);
 
