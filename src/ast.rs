@@ -1,5 +1,3 @@
-use std::iter;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -24,13 +22,30 @@ mod tests {
                 Out
             ])
         );
+
+        assert_eq!(
+            Prog::from_str("+[>,]+[<.-]").unwrap(),
+            Prog(vec![
+                Inc,
+                JmpIfZero(5),
+                Right,
+                In,
+                JmpIfNonZero(2),
+                Inc,
+                JmpIfZero(11),
+                Left,
+                Out,
+                Dec,
+                JmpIfNonZero(7),
+            ])
+        );
     }
 }
 
 #[derive(PartialEq, Eq, Debug, Hash)]
 pub struct Prog(pub Vec<Insn>);
 
-#[derive(PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum Insn {
     /// '>' - Move the data pointer to the right
     Right,
@@ -67,13 +82,10 @@ impl Prog {
     }
 
     fn from_brainf_block(insn_ptr: usize, block: &brainfuck::ast::Block) -> Self {
-        Self(
-            block
-                .into_iter()
-                .enumerate()
-                .flat_map(|(i, node)| Self::from_brainf_node(insn_ptr + i, node).0.into_iter())
-                .collect(),
-        )
+        Self(block.into_iter().fold(vec![], |acc, node| {
+            let insns = Self::from_brainf_node(insn_ptr + acc.len(), node).0;
+            [acc, insns].concat()
+        }))
     }
 
     fn from_brainf_node(insn_ptr: usize, node: &brainfuck::ast::Node) -> Self {
@@ -87,10 +99,12 @@ impl Prog {
             GetCh => vec![Insn::In],
             Loop(block) => {
                 let inner = Self::from_brainf_block(insn_ptr + 1, block);
-                iter::once(Insn::JmpIfZero(insn_ptr + 1 + inner.0.len() + 1))
-                    .chain(inner.0.into_iter())
-                    .chain(iter::once(Insn::JmpIfNonZero(insn_ptr + 1)))
-                    .collect()
+                [
+                    vec![Insn::JmpIfZero(insn_ptr + 1 + inner.0.len() + 1)],
+                    inner.0,
+                    vec![Insn::JmpIfNonZero(insn_ptr + 1)],
+                ]
+                .concat()
             }
         })
     }
