@@ -111,6 +111,7 @@ impl<'ctx> State<'ctx> {
     }
 
     fn set_cell(&self, val: z3::ast::BV<'ctx>) -> Self {
+        let val = val.simplify();
         let mem = {
             let mut mem = self.mem.clone();
             mem.0[self.data_ptr] = val;
