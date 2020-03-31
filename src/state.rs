@@ -1,9 +1,10 @@
 use crate::ast;
+use crate::cached_solver::CachedSolver;
+use crate::cached_solver::SolverResult;
 
 use std::iter;
 use std::rc::Rc;
 
-use derivative::Derivative;
 use derive_setters::Setters;
 use z3::ast::Ast as Z3Ast;
 
@@ -27,13 +28,8 @@ mod tests {
 pub struct SymBytes<'ctx>(pub Vec<z3::ast::BV<'ctx>>);
 
 /// Symbolic program state
-#[derive(Clone, Setters, PartialEq, Eq, Debug, Derivative)]
-#[derivative(Hash)]
+#[derive(Clone, Setters, PartialEq, Eq, Debug, Hash)]
 pub struct State<'ctx> {
-    /// z3 context
-    #[derivative(Hash = "ignore")]
-    pub ctx: &'ctx z3::Context,
-
     /// Brainf*** program
     pub prog: Rc<ast::Prog>,
 
@@ -81,12 +77,9 @@ fn init_mem(ctx: &z3::Context, mem_size: usize) -> SymBytes {
     SymBytes(iter::repeat(zero).take(mem_size).collect())
 }
 
-pub type SmtResult<T> = Result<T, z3::SatResult>;
-
 impl<'ctx> State<'ctx> {
     pub fn make_entry(ctx: &'ctx z3::Context, prog: Rc<ast::Prog>, mem_size: usize) -> Self {
         State {
-            ctx,
             prog,
             mem: init_mem(ctx, mem_size),
             insn_ptr: 0,
@@ -97,16 +90,16 @@ impl<'ctx> State<'ctx> {
         }
     }
 
-    pub fn step(&self) -> Vec<Self> {
+    pub fn step(&self, ctx: &'ctx z3::Context) -> Vec<Self> {
         match self.prog.0.get(self.insn_ptr) {
             Some(ast::Insn::Right) => vec![self.op_right()],
             Some(ast::Insn::Left) => vec![self.op_left()],
-            Some(ast::Insn::Inc) => vec![self.op_inc()],
-            Some(ast::Insn::Dec) => vec![self.op_dec()],
+            Some(ast::Insn::Inc) => vec![self.op_inc(ctx)],
+            Some(ast::Insn::Dec) => vec![self.op_dec(ctx)],
             Some(ast::Insn::Out) => vec![self.op_out()],
-            Some(ast::Insn::In) => vec![self.op_in()],
-            Some(ast::Insn::JmpIfZero(insn_ptr)) => self.op_jmp_if_zero(*insn_ptr),
-            Some(ast::Insn::JmpIfNonZero(insn_ptr)) => self.op_jmp_if_non_zero(*insn_ptr),
+            Some(ast::Insn::In) => vec![self.op_in(ctx)],
+            Some(ast::Insn::JmpIfZero(insn_ptr)) => self.op_jmp_if_zero(ctx, *insn_ptr),
+            Some(ast::Insn::JmpIfNonZero(insn_ptr)) => self.op_jmp_if_non_zero(ctx, *insn_ptr),
             None => vec![],
         }
     }
@@ -115,32 +108,37 @@ impl<'ctx> State<'ctx> {
         self.insn_ptr == self.prog.0.len()
     }
 
-    pub fn check_sat(&self) -> SmtResult<z3::Solver> {
-        let constraint = z3::ast::Bool::from_bool(self.ctx, true);
-        self.check_sat_with(&constraint)
+    pub fn concretize(
+        &self,
+        ctx: &'ctx z3::Context,
+        solver: &mut CachedSolver<'ctx>,
+    ) -> SolverResult<ConcreteState> {
+        self.concretize_helper(ctx, solver, None)
     }
 
-    pub fn check_sat_with(&self, constraint: &z3::ast::Bool<'ctx>) -> SmtResult<z3::Solver> {
-        let solver = z3::Solver::new(self.ctx);
-        solver.assert(&self.path);
-        solver.assert(constraint);
-        let err = solver.check();
-        if err == z3::SatResult::Sat {
-            Ok(solver)
-        } else {
-            Err(err)
-        }
+    pub fn concretize_with(
+        &self,
+        ctx: &'ctx z3::Context,
+        solver: &mut CachedSolver<'ctx>,
+        constraint: &z3::ast::Bool<'ctx>,
+    ) -> SolverResult<ConcreteState> {
+        self.concretize_helper(ctx, solver, Some(constraint))
     }
 
-    pub fn concretize(&self) -> SmtResult<ConcreteState> {
-        let constraint = z3::ast::Bool::from_bool(self.ctx, true);
-        self.concretize_with(&constraint)
-    }
-
-    pub fn concretize_with(&self, constraint: &z3::ast::Bool<'ctx>) -> SmtResult<ConcreteState> {
-        match self.check_sat_with(constraint) {
-            Ok(solver) => Ok(ConcreteState::from_model(&solver.get_model(), self)
-                .expect("failed concretizing state")),
+    pub fn concretize_helper(
+        &self,
+        ctx: &'ctx z3::Context,
+        solver: &mut CachedSolver<'ctx>,
+        constraint: Option<&z3::ast::Bool<'ctx>>,
+    ) -> SolverResult<ConcreteState> {
+        let expr = match constraint {
+            Some(constraint) => z3::ast::Bool::and(&self.path, &[&constraint]),
+            None => self.path.clone(),
+        };
+        match solver.solve(ctx, expr) {
+            Ok(model) => {
+                Ok(ConcreteState::from_model(&model, self).expect("failed concretizing state"))
+            }
             Err(err) => Err(err),
         }
     }
@@ -180,8 +178,8 @@ impl<'ctx> State<'ctx> {
             .inc_insn_ptr()
     }
 
-    fn op_inc_dec_helper(&self, is_inc: bool) -> Self {
-        let one = z3::ast::BV::from_u64(self.ctx, 1, 8);
+    fn op_inc_dec_helper(&self, ctx: &'ctx z3::Context, is_inc: bool) -> Self {
+        let one = z3::ast::BV::from_u64(ctx, 1, 8);
         let fcn = if is_inc {
             z3::ast::BV::bvadd
         } else {
@@ -192,12 +190,12 @@ impl<'ctx> State<'ctx> {
         self.set_cell(new_val).inc_insn_ptr()
     }
 
-    fn op_inc(&self) -> Self {
-        self.op_inc_dec_helper(true)
+    fn op_inc(&self, ctx: &'ctx z3::Context) -> Self {
+        self.op_inc_dec_helper(ctx, true)
     }
 
-    fn op_dec(&self) -> Self {
-        self.op_inc_dec_helper(false)
+    fn op_dec(&self, ctx: &'ctx z3::Context) -> Self {
+        self.op_inc_dec_helper(ctx, false)
     }
 
     fn op_out(&self) -> Self {
@@ -213,9 +211,9 @@ impl<'ctx> State<'ctx> {
             .inc_insn_ptr()
     }
 
-    fn op_in(&self) -> Self {
+    fn op_in(&self, ctx: &'ctx z3::Context) -> Self {
         let name = format!("input[{}]", self.input.0.len());
-        let val = z3::ast::BV::new_const(self.ctx, name, 8);
+        let val = z3::ast::BV::new_const(ctx, name, 8);
         self.clone()
             .input(SymBytes(
                 self.input
@@ -229,8 +227,8 @@ impl<'ctx> State<'ctx> {
             .inc_insn_ptr()
     }
 
-    fn op_jmp_helper(&self, insn_ptr: usize, if_zero: bool) -> Vec<Self> {
-        let cell_eq_zero = self.get_cell()._eq(&z3::ast::BV::from_u64(self.ctx, 0, 8));
+    fn op_jmp_helper(&self, ctx: &'ctx z3::Context, insn_ptr: usize, if_zero: bool) -> Vec<Self> {
+        let cell_eq_zero = self.get_cell()._eq(&z3::ast::BV::from_u64(ctx, 0, 8));
         let cell_not_eq_zero = z3::ast::Bool::not(&cell_eq_zero);
 
         let zero_path = self.path.and(&[&cell_eq_zero]).simplify();
@@ -248,12 +246,12 @@ impl<'ctx> State<'ctx> {
         vec![taken, not_taken]
     }
 
-    fn op_jmp_if_zero(&self, insn_ptr: usize) -> Vec<Self> {
-        self.op_jmp_helper(insn_ptr, true)
+    fn op_jmp_if_zero(&self, ctx: &'ctx z3::Context, insn_ptr: usize) -> Vec<Self> {
+        self.op_jmp_helper(ctx, insn_ptr, true)
     }
 
-    fn op_jmp_if_non_zero(&self, insn_ptr: usize) -> Vec<Self> {
-        self.op_jmp_helper(insn_ptr, false)
+    fn op_jmp_if_non_zero(&self, ctx: &'ctx z3::Context, insn_ptr: usize) -> Vec<Self> {
+        self.op_jmp_helper(ctx, insn_ptr, false)
     }
 }
 

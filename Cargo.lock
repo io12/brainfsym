@@ -40,7 +40,6 @@ name = "brainfsym"
 version = "0.1.0"
 dependencies = [
  "brainfuck_rs",
- "derivative",
  "derive_setters",
  "env_logger",
  "log",
@@ -110,17 +109,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9b5a2f4ac4969822c62224815d069952656cadc7084fdca9751e6d959189b72"
 dependencies = [
  "darling_core",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "derivative"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b94d2eb97732ec84b4e25eaf37db890e317b80e921f168c82cb5282473f8151"
-dependencies = [
- "proc-macro2",
  "quote",
  "syn",
 ]

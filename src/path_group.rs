@@ -1,4 +1,6 @@
 use crate::ast;
+use crate::cached_solver::CachedSolver;
+use crate::cached_solver::Error;
 use crate::state::ConcreteState;
 use crate::state::State;
 use crate::state::SymBytes;
@@ -35,17 +37,22 @@ impl<'ctx> PathGroup<'ctx> {
         }
     }
 
-    fn add_continuations(&mut self, state: &State<'ctx>) {
-        for state in state.step() {
+    fn add_continuations(&mut self, ctx: &'ctx z3::Context, state: &State<'ctx>) {
+        for state in state.step(ctx) {
             if !self.visited.contains(&state) {
                 self.next.push(state);
             }
         }
     }
 
-    pub fn explore_until<F, T>(&mut self, fcn: F) -> Option<T>
+    pub fn explore_until<F, T>(
+        &mut self,
+        ctx: &'ctx z3::Context,
+        solver: &mut CachedSolver<'ctx>,
+        mut fcn: F,
+    ) -> Option<T>
     where
-        F: Fn(&State) -> ExploreFnResult<T>,
+        F: FnMut(&State<'ctx>, &mut CachedSolver<'ctx>) -> ExploreFnResult<T>,
     {
         loop {
             debug!(
@@ -55,22 +62,27 @@ impl<'ctx> PathGroup<'ctx> {
             );
             let state = self.next.pop()?;
             trace!("state: {:#?}", state);
-            if let Err(z3::SatResult::Unsat) = state.check_sat() {
+            if let Err(Error::Unsat) = state.concretize(ctx, solver) {
                 continue;
             }
-            match fcn(&state) {
+            match fcn(&state, solver) {
                 ExploreFnResult::Done(v) => return Some(v),
                 ExploreFnResult::Invalid => continue,
                 ExploreFnResult::Valid => {
                     self.visited.insert(state.clone());
-                    self.add_continuations(&state)
+                    self.add_continuations(ctx, &state)
                 }
             }
         }
     }
 
-    pub fn explore_until_output(&mut self, output: &[u8]) -> Option<ConcreteState> {
-        self.explore_until(|state| {
+    pub fn explore_until_output(
+        &mut self,
+        ctx: &'ctx z3::Context,
+        solver: &mut CachedSolver<'ctx>,
+        output: &[u8],
+    ) -> Option<ConcreteState> {
+        self.explore_until(ctx, solver, |state, solver| {
             let sym_len = state.output.0.len();
             let concr_len = output.len();
 
@@ -80,13 +92,12 @@ impl<'ctx> PathGroup<'ctx> {
             match cmp {
                 Ordering::Greater => ExploreFnResult::Invalid,
                 Ordering::Less | Ordering::Equal => {
-                    let output_eq = SymBytes::syms_eq(state.ctx, &state.output, output);
-                    let state = state.concretize_with(&output_eq);
+                    let output_eq = SymBytes::syms_eq(ctx, &state.output, output);
+                    let state = state.concretize_with(ctx, solver, &output_eq);
                     match state {
                         Ok(state) if cmp == Ordering::Equal => ExploreFnResult::Done(state),
-                        Ok(_) | Err(z3::SatResult::Unknown) => ExploreFnResult::Valid,
-                        Err(z3::SatResult::Unsat) => ExploreFnResult::Invalid,
-                        Err(z3::SatResult::Sat) => unreachable!(),
+                        Ok(_) | Err(Error::Unknown) => ExploreFnResult::Valid,
+                        Err(Error::Unsat) => ExploreFnResult::Invalid,
                     }
                 }
             }
@@ -102,10 +113,13 @@ mod tests {
     fn test_add() {
         let cfg = z3::Config::new();
         let ctx = z3::Context::new(&cfg);
+        let mut solver = CachedSolver::new();
 
         let prog = ast::Prog::from_str(",>,[-<+>]<.").unwrap();
         let mut path_group = PathGroup::make_entry(&ctx, Rc::new(prog), 16);
-        let res = path_group.explore_until_output(&[2]).unwrap();
+        let res = path_group
+            .explore_until_output(&ctx, &mut solver, &[2])
+            .unwrap();
         assert_eq!(res.input.iter().sum::<u8>(), 2);
     }
 
@@ -113,10 +127,13 @@ mod tests {
     fn test_rev() {
         let cfg = z3::Config::new();
         let ctx = z3::Context::new(&cfg);
+        let mut solver = CachedSolver::new();
 
         let prog = ast::Prog::from_str("+[>,]+[<.-]").unwrap();
         let mut path_group = PathGroup::make_entry(&ctx, Rc::new(prog), 16);
-        let res = path_group.explore_until_output(b"ABC").unwrap();
+        let res = path_group
+            .explore_until_output(&ctx, &mut solver, b"ABC")
+            .unwrap();
         assert_eq!(res.input, b"CBA\x00");
     }
 }
