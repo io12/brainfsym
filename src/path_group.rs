@@ -6,12 +6,10 @@ use crate::state::State;
 use crate::state::SymBytes;
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
 use std::rc::Rc;
 
 pub struct PathGroup<'ctx> {
     next: Vec<State<'ctx>>,
-    visited: HashSet<State<'ctx>>,
 }
 
 /// Type returned by `explore_until()` callback
@@ -33,15 +31,12 @@ impl<'ctx> PathGroup<'ctx> {
     pub fn make_entry(ctx: &'ctx z3::Context, prog: Rc<ast::Prog>, mem_size: usize) -> Self {
         Self {
             next: vec![State::make_entry(ctx, prog, mem_size)],
-            visited: HashSet::new(),
         }
     }
 
     fn add_continuations(&mut self, ctx: &'ctx z3::Context, state: &State<'ctx>) {
         for state in state.step(ctx) {
-            if !self.visited.contains(&state) {
-                self.next.push(state);
-            }
+            self.next.push(state);
         }
     }
 
@@ -55,11 +50,7 @@ impl<'ctx> PathGroup<'ctx> {
         F: FnMut(&State<'ctx>, &mut CachedSolver<'ctx>) -> ExploreFnResult<T>,
     {
         loop {
-            debug!(
-                "num next: {}, num_visited: {}",
-                self.next.len(),
-                self.visited.len()
-            );
+            debug!("num next: {}", self.next.len(),);
             let state = self.next.pop()?;
             trace!("state: {:#?}", state);
             if let Err(Error::Unsat) = state.concretize(ctx, solver) {
@@ -68,10 +59,7 @@ impl<'ctx> PathGroup<'ctx> {
             match fcn(&state, solver) {
                 ExploreFnResult::Done(v) => return Some(v),
                 ExploreFnResult::Invalid => continue,
-                ExploreFnResult::Valid => {
-                    self.visited.insert(state.clone());
-                    self.add_continuations(ctx, &state)
-                }
+                ExploreFnResult::Valid => self.add_continuations(ctx, &state),
             }
         }
     }
