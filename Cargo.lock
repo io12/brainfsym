@@ -38,6 +38,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "brainfsym-cli"
+version = "0.1.0"
+dependencies = [
+ "brainfsym",
+]
+
+[[package]]
 name = "brainfuck_rs"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
