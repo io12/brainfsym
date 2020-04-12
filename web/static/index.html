@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>brainfsym</title>
+    </head>
+    <body>
+        <script type="module">
+         import init, { run_app } from './pkg/brainfsym_web.js';
+         async function main() {
+             await init('/pkg/brainfsym_web_bg.wasm');
+             run_app();
+         }
+         main()
+	</script>
+    </body>
+</html>
