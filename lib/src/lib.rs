@@ -9,3 +9,5 @@ mod state;
 pub use cached_solver::*;
 pub use path_group::*;
 pub use state::*;
+
+pub use z3;
