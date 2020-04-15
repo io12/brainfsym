@@ -31,3 +31,7 @@ impl yew::Component for Model {
 pub fn run_app() {
     yew::start_app::<Model>();
 }
+
+fn main() {
+    run_app()
+}
