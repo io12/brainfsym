@@ -1,5 +1,3 @@
-use wasm_bindgen::prelude::*;
-
 struct WebUiData {
     solver: brainfsym::CachedSolver<'static>,
     prog: brainfsym::ast::Prog,
@@ -27,8 +25,7 @@ impl yew::Component for Model {
     }
 }
 
-#[wasm_bindgen]
-pub fn run_app() {
+fn run_app() {
     yew::start_app::<Model>();
 }
 
