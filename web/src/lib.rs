@@ -1,9 +1,9 @@
 use wasm_bindgen::prelude::*;
 
 struct WebUiData {
-    solver: brainfsym::CachedSolver<'static>,
-    prog: brainfsym::ast::Prog,
-    path_group: brainfsym::PathGroup<'static>,
+    solver: (),
+    prog: (),
+    path_group: (),
 }
 
 struct Model {
@@ -30,8 +30,4 @@ impl yew::Component for Model {
 #[wasm_bindgen]
 pub fn run_app() {
     yew::start_app::<Model>();
-}
-
-fn main() {
-    run_app()
 }

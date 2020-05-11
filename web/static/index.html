@@ -5,6 +5,13 @@
         <title>brainfsym</title>
     </head>
     <body>
-        <script src="/pkg/brainfsym-web.js"></script>
+        <script type="module">
+	    import init, { run_app } from "./pkg/brainfsym_web.js";
+	    async function main() {
+	        await init("./pkg/brainfsym_web_bg.wasm");
+		run_app();
+	    }
+	    main()
+	</script>
     </body>
 </html>
