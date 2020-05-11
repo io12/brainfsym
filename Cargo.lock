@@ -82,6 +82,7 @@ dependencies = [
 name = "brainfsym-web"
 version = "0.1.0"
 dependencies = [
+ "brainfsym",
  "wasm-bindgen",
  "yew",
 ]
